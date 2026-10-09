@@ -79,4 +79,4 @@ powershell -ExecutionPolicy Bypass -File tools/prepare_smoke.ps1
 
 ## 许可证
 
-本项目使用 [MIT License](LICENSE)，保留远程仓库原有版权与许可证文本。原 Fabric 模板的 CC0 文本保留在 [LICENSE.template-CC0](LICENSE.template-CC0)。
+本项目使用 [MIT License](LICENSE)，保留远程仓库原有版权与许可证文本。
