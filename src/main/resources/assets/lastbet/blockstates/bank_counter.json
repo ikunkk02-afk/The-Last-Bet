@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": {"model": "lastbet:block/bank_counter"},
+    "facing=east": {"model": "lastbet:block/bank_counter", "y": 90},
+    "facing=south": {"model": "lastbet:block/bank_counter", "y": 180},
+    "facing=west": {"model": "lastbet:block/bank_counter", "y": 270}
+  }
+}

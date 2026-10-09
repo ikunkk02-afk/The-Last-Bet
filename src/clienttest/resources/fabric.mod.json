@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "lastbet_client_test",
+  "version": "1.0.0",
+  "name": "The Last Bet live client smoke tests",
+  "environment": "client",
+  "entrypoints": {"client": ["com.shouyun.lastbet.test.BankClientSmoke"]},
+  "depends": {"lastbet": "*"}
+}

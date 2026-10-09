@@ -1,0 +1,176 @@
+plugins {
+	id 'fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+repositories {
+	mavenCentral()
+	// Add repositories to retrieve artifacts from in here.
+	// You should only use this when depending on other mods because
+	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
+	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
+	// for more information about repositories.
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"lastbet" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+fabricApi {
+	configureDataGeneration {
+		client = true
+		modId = "lastbet"
+	}
+}
+
+dependencies {
+	testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
+	// To change the versions see the gradle.properties file
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+	// Fabric API. This is technically optional, but you probably want it anyway.
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+}
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+	it.options.encoding = 'UTF-8'
+}
+
+java {
+	toolchain.languageVersion = JavaLanguageVersion.of(21)
+	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
+	// if it is present.
+	// If you remove this line, sources will not be generated.
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+test {
+	useJUnitPlatform()
+}
+
+sourceSets {
+	clienttest {
+		compileClasspath += sourceSets.client.compileClasspath + sourceSets.main.output + sourceSets.client.output
+		runtimeClasspath += sourceSets.client.runtimeClasspath + sourceSets.main.output + sourceSets.client.output
+	}
+	gametest {
+		compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+		runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+	}
+}
+
+loom {
+	mods {
+		lastbet_test { sourceSet sourceSets.gametest }
+		lastbet_client_test { sourceSet sourceSets.clienttest }
+	}
+	runs {
+		smokeServer {
+			server()
+			source sourceSets.gametest
+			vmArg '-Dlastbet.smoke.server=true'
+			programArg 'nogui'
+			runDir 'build/smoke-server'
+		}
+		clientSmokeA {
+			client()
+			source sourceSets.clienttest
+			programArgs '--username', 'BankSmokeA', '--width', '1280', '--height', '960'
+			runDir 'build/client-smoke-a'
+		}
+		clientSmokeB {
+			client()
+			source sourceSets.clienttest
+			programArgs '--username', 'BankSmokeB', '--width', '1280', '--height', '960'
+			runDir 'build/client-smoke-b'
+		}
+		clientSmokeUnavailable {
+			client()
+			source sourceSets.clienttest
+			vmArg '-Dlastbet.smoke.expectUnavailable=true'
+			programArgs '--username', 'BankSmokeCorrupt', '--width', '1280', '--height', '960'
+			runDir 'build/client-smoke-unavailable'
+		}
+		gametest {
+			server()
+			name 'Bank GameTests'
+			source sourceSets.gametest
+			vmArg '-Dfabric-api.gametest'
+			vmArg '-Dfabric-api.gametest.report-file=reports/bank-gametest.xml'
+			runDir 'build/gametest'
+		}
+	}
+}
+
+tasks.named('runSmokeServer', JavaExec) { standardInput = System.in }
+tasks.withType(JavaExec).configureEach { maxHeapSize = '2G' }
+['A', 'B', 'Unavailable'].each { suffix ->
+	def reportDirectory = layout.buildDirectory.dir("client-smoke-${suffix.toLowerCase()}")
+	tasks.named("runClientSmoke${suffix}") {
+		doFirst {
+			new File(reportDirectory.get().asFile, 'smoke-failed.txt').delete()
+			new File(reportDirectory.get().asFile, 'smoke-completed.txt').delete()
+		}
+		doLast {
+			def directory = reportDirectory.get().asFile
+			if (new File(directory, 'smoke-failed.txt').exists()) {
+				throw new GradleException("Client smoke test failed: ${directory}/smoke-failed.txt")
+			}
+			if (!new File(directory, 'smoke-completed.txt').exists()) {
+				throw new GradleException("Client exited before completing bank smoke tests: ${directory}")
+			}
+		}
+	}
+}
+
+tasks.named('check') { dependsOn tasks.named('runGametest') }
+
+jar {
+	def projectName = project.name
+	inputs.property "projectName", projectName
+
+	from("LICENSE") {
+		rename { "${it}_$projectName"}
+	}
+}
+
+// configure the maven publication
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			from components.java
+		}
+	}
+
+	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
+	repositories {
+		// Add repositories to publish to here.
+		// Notice: This block does NOT have the same function as the block in the top level.
+		// The repositories here will be used for publishing your artifact, not for
+		// retrieving dependencies.
+	}
+}

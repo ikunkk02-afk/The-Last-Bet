@@ -1,0 +1,42 @@
+{
+	"schemaVersion": 1,
+	"id": "lastbet",
+	"version": "${version}",
+	"name": "The Last Bet",
+	"description": "最后一注：旨在揭示赌博风险的模组。第一阶段提供银行开户与银行卡。",
+	"authors": [
+		"寿云"
+	],
+	"contact": {
+		"homepage": "https://github.com/ikunkk02-afk/The-Last-Bet",
+		"sources": "https://github.com/ikunkk02-afk/The-Last-Bet",
+		"issues": "https://github.com/ikunkk02-afk/The-Last-Bet/issues"
+	},
+	"license": "MIT",
+	"icon": "assets/lastbet/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.shouyun.lastbet.TheLastBet"
+		],
+		"client": [
+			"com.shouyun.lastbet.client.TheLastBetClient"
+		],
+		"fabric-datagen": [
+			"com.shouyun.lastbet.client.TheLastBetDataGenerator"
+		]
+	},
+	"mixins": [
+		"lastbet.mixins.json",
+		{
+			"config": "lastbet.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~1.21.1",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
