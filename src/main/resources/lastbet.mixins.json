@@ -3,7 +3,10 @@
 	"package": "com.shouyun.lastbet.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"ExampleMixin"
+		"ExampleMixin",
+		"BankPlayerMixin",
+		"BankConnectionMixin",
+		"BankPlayerListMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

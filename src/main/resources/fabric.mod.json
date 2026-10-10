@@ -3,7 +3,7 @@
 	"id": "lastbet",
 	"version": "${version}",
 	"name": "The Last Bet",
-	"description": "最后一注：旨在揭示赌博风险的模组。第一阶段提供银行开户与银行卡。",
+	"description": "最后一注：旨在揭示赌博风险的模组。提供银行开户、银行卡、绿宝石存取款与持久化交易流水。",
 	"authors": [
 		"寿云"
 	],

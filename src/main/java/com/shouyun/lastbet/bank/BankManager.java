@@ -26,15 +26,20 @@ public final class BankManager {
     private final MinecraftServer server;
     private final Path file;
     private BankSavedData data;
+    private final BankTransactions transactions;
 
     public enum Result {
-        NONE, OPENED, ALREADY_EXISTS, INVENTORY_FULL, UNAVAILABLE, INVALID_REQUEST;
+        NONE, OPENED, ALREADY_EXISTS, INVENTORY_FULL, UNAVAILABLE, INVALID_REQUEST,
+        DEPOSITED, WITHDRAWN, EMPTY_AMOUNT, NOT_ENOUGH_EMERALDS, INSUFFICIENT_BALANCE,
+        NO_SPACE, BALANCE_OVERFLOW, RECOVERY_PENDING, STORAGE_LIMIT;
         public String translationKey() { return "message.lastbet.bank." + name().toLowerCase(java.util.Locale.ROOT); }
     }
 
     public static void initialize() {
         ServerLifecycleEvents.SERVER_STARTED.register(BankManager::get);
         ServerLifecycleEvents.SERVER_STOPPED.register(INSTANCES::remove);
+        net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents.COPY_FROM.register((oldPlayer, newPlayer, alive) ->
+                ((BankPlayerState) newPlayer).lastbetCheckpoint(((BankPlayerState) oldPlayer).lastbetCheckpoint()));
     }
 
     public static BankManager get(MinecraftServer server) {
@@ -52,12 +57,28 @@ public final class BankManager {
                 data = storage.get(BankSavedData.FACTORY, BankSavedData.NAME);
                 if (data == null) throw new IOException("Existing bank file could not be decoded; refusing empty replacement");
             } else {
+                if (Files.exists(file.getParent().resolve("lastbet_transactions"))) throw new IOException("Bank missing but transaction evidence exists; refusing empty replacement");
                 data = new BankSavedData();
                 storage.set(BankSavedData.NAME, data);
             }
         } catch (IOException | RuntimeException failure) {
             disable(failure);
         }
+        transactions = new BankTransactions(file, server.getWorldPath(LevelResource.PLAYER_DATA_DIR), data, server.registryAccess());
+    }
+
+    public BankTransactions transactions() { checkThread(); return transactions; }
+
+    public java.util.List<BankTransaction> history(UUID owner) {
+        checkThread();
+        return isAvailable() ? data.history(owner) : java.util.List.of();
+    }
+
+    public Result transact(ServerPlayer player, BankTransaction.Type type, long amount) {
+        checkThread();
+        if (player.server != server || !(player.containerMenu instanceof BankMenu menu)
+                || !menu.stillValid(player) || ((BankPlayerState) player).lastbetQuarantined()) return Result.INVALID_REQUEST;
+        return transactions.transact(player, type, amount);
     }
 
     public boolean isAvailable() { return data != null && data.isAvailable(); }
@@ -108,6 +129,7 @@ public final class BankManager {
             return Result.INVALID_REQUEST;
         }
         if (!isAvailable()) return Result.UNAVAILABLE;
+        if (transactions.locked(player.getUUID()) || ((BankPlayerState) player).lastbetQuarantined()) return Result.RECOVERY_PENDING;
         BankAccount account = data.findByOwner(player.getUUID()).orElse(null);
         if (account != null && !account.deliveryPending()) return Result.ALREADY_EXISTS;
         // Recovery checks the actual server inventory before attempting another insertion.

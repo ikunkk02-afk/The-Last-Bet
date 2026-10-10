@@ -20,7 +20,23 @@ public final class BankPersistence {
         return NbtIo.readCompressed(file, NbtAccounter.create(64L * 1024 * 1024));
     }
 
+    /** Apply exactly the disk reader's allocation budget before accepting a transaction. */
+    static void verifyReadable(CompoundTag tag) throws IOException {
+        var bytes = new java.io.ByteArrayOutputStream();
+        NbtIo.writeCompressed(tag, bytes);
+        if (!NbtIo.readCompressed(new java.io.ByteArrayInputStream(bytes.toByteArray()),
+                NbtAccounter.create(64L * 1024 * 1024)).equals(tag)) throw new IOException("NBT budget preflight failed");
+    }
+
     public static void write(Path file, CompoundTag tag) throws IOException {
+        write(file, tag, false);
+    }
+
+    public static void writeAtomic(Path file, CompoundTag tag) throws IOException {
+        write(file, tag, true);
+    }
+
+    private static void write(Path file, CompoundTag tag, boolean requireAtomic) throws IOException {
         Files.createDirectories(file.getParent());
         Path temporary = Files.createTempFile(file.getParent(), file.getFileName().toString(), ".tmp");
         try {
@@ -35,12 +51,14 @@ public final class BankPersistence {
             try {
                 Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             } catch (AtomicMoveNotSupportedException unsupported) {
+                if (requireAtomic) throw unsupported;
                 // The previous file is retained as .dat_old on filesystems without atomic rename.
                 Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
             }
             if (!read(file).equals(tag)) throw new IOException("Saved NBT verification failed: " + file);
         } finally {
-            Files.deleteIfExists(temporary);
+            // Failed transactional temporary files are recovery evidence, not garbage to erase.
+            if (!requireAtomic) Files.deleteIfExists(temporary);
         }
     }
 }

@@ -1,8 +1,8 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $testRoot = Join-Path $projectRoot 'build'
-$serverDir = Join-Path $testRoot 'smoke-server'
-$clientDirs = @((Join-Path $testRoot 'client-smoke-a'), (Join-Path $testRoot 'client-smoke-b'))
+$serverDir = Join-Path $testRoot 'phase2-smoke-server'
+$clientDirs = @((Join-Path $testRoot 'phase2-client-smoke-a'), (Join-Path $testRoot 'phase2-client-smoke-b'), (Join-Path $testRoot 'phase2-client-smoke-unavailable'))
 New-Item -ItemType Directory -Force $serverDir | Out-Null
 if (-not (Test-Path (Join-Path $serverDir 'server.properties'))) {
     @'
@@ -23,15 +23,16 @@ motd=The Last Bet isolated smoke test
 foreach ($clientDir in $clientDirs) {
     New-Item -ItemType Directory -Force $clientDir | Out-Null
     if (-not (Test-Path (Join-Path $clientDir 'options.txt'))) {
-        @'
-lang:zh_cn
+        $testLanguage = if ($clientDir.EndsWith('-b')) { 'en_us' } else { 'zh_cn' }
+        @"
+lang:$testLanguage
 guiScale:2
 onboardAccessibility:false
 maxFps:60
 pauseOnLostFocus:false
 renderDistance:3
 simulationDistance:5
-'@ | Set-Content (Join-Path $clientDir 'options.txt') -Encoding ascii
+"@ | Set-Content (Join-Path $clientDir 'options.txt') -Encoding ascii
     }
 }
 Write-Output 'Isolated loopback smoke test prepared under build/. Existing worlds and reports are retained.'

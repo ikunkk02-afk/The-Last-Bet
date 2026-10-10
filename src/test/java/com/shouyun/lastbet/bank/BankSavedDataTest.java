@@ -84,7 +84,7 @@ class BankSavedDataTest {
 
     @Test void unknownSchemaIsRejected() {
         CompoundTag tag = serialized();
-        tag.putInt("schema_version", 2);
+        tag.putInt("schema_version", 99);
         assertThrows(IllegalArgumentException.class, () -> BankSavedData.load(tag, null));
         assertThrows(IllegalArgumentException.class, () -> BankSavedData.load(new CompoundTag(), null));
     }

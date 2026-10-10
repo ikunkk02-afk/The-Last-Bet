@@ -94,26 +94,27 @@ loom {
 			source sourceSets.gametest
 			vmArg '-Dlastbet.smoke.server=true'
 			programArg 'nogui'
-			runDir 'build/smoke-server'
+			runDir 'build/phase2-smoke-server'
 		}
 		clientSmokeA {
 			client()
 			source sourceSets.clienttest
 			programArgs '--username', 'BankSmokeA', '--width', '1280', '--height', '960'
-			runDir 'build/client-smoke-a'
+			runDir 'build/phase2-client-smoke-a'
 		}
 		clientSmokeB {
 			client()
 			source sourceSets.clienttest
 			programArgs '--username', 'BankSmokeB', '--width', '1280', '--height', '960'
-			runDir 'build/client-smoke-b'
+			runDir 'build/phase2-client-smoke-b'
 		}
 		clientSmokeUnavailable {
 			client()
 			source sourceSets.clienttest
 			vmArg '-Dlastbet.smoke.expectUnavailable=true'
+			if (project.hasProperty('bankSmokeStopServer')) vmArg '-Dlastbet.smoke.stopServer=true'
 			programArgs '--username', 'BankSmokeCorrupt', '--width', '1280', '--height', '960'
-			runDir 'build/client-smoke-unavailable'
+			runDir 'build/phase2-client-smoke-unavailable'
 		}
 		gametest {
 			server()
@@ -123,13 +124,44 @@ loom {
 			vmArg '-Dfabric-api.gametest.report-file=reports/bank-gametest.xml'
 			runDir 'build/gametest'
 		}
+		crashServer {
+			server()
+			source sourceSets.gametest
+			def point = project.findProperty('bankCrashPoint') ?: 'PREPARE_AFTER'
+			def mode = project.findProperty('bankCrashMode') ?: 'recover'
+			vmArg "-Dlastbet.test.crashPoint=${point}"
+			vmArg "-Dlastbet.test.crashMode=${mode}"
+			if (mode == 'crash') vmArg "-Dlastbet.test.halt=${point}"
+			programArg 'nogui'
+			runDir "build/crash-${point}"
+		}
+		clientSmokeSingleplayer {
+			client()
+			source sourceSets.clienttest
+			vmArg '-Dlastbet.test.singleplayer=true'
+			programArgs '--username', 'BankSingleplayer', '--width', '1280', '--height', '960'
+			runDir 'build/phase2-singleplayer-client'
+		}
 	}
 }
 
 tasks.named('runSmokeServer', JavaExec) { standardInput = System.in }
+tasks.named('runClientSmokeSingleplayer') {
+	doFirst {
+		def directory = layout.buildDirectory.dir('phase2-singleplayer-client').get().asFile
+		new File(directory, 'smoke-failed.txt').delete()
+		new File(directory, 'singleplayer-passed.json').delete()
+	}
+	doLast {
+		def directory = layout.buildDirectory.dir('phase2-singleplayer-client').get().asFile
+		if (new File(directory, 'smoke-failed.txt').exists() || !new File(directory, 'singleplayer-passed.json').exists()) {
+			throw new GradleException("Singleplayer smoke test failed or incomplete: ${directory}")
+		}
+	}
+}
 tasks.withType(JavaExec).configureEach { maxHeapSize = '2G' }
 ['A', 'B', 'Unavailable'].each { suffix ->
-	def reportDirectory = layout.buildDirectory.dir("client-smoke-${suffix.toLowerCase()}")
+	def reportDirectory = layout.buildDirectory.dir("phase2-client-smoke-${suffix.toLowerCase()}")
 	tasks.named("runClientSmoke${suffix}") {
 		doFirst {
 			new File(reportDirectory.get().asFile, 'smoke-failed.txt').delete()

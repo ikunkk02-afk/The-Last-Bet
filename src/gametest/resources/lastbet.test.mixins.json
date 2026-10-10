@@ -1,0 +1,7 @@
+{
+  "required": true,
+  "package": "com.shouyun.lastbet.test.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": ["TransactionFaultMixin"],
+  "injectors": {"defaultRequire": 1}
+}

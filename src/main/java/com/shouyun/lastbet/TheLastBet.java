@@ -25,7 +25,8 @@ public class TheLastBet implements ModInitializer {
 
 		BankRegistry.initialize();
 		BankManager.initialize();
-		LOGGER.info("The Last Bet: bank registration initialized");
+		com.shouyun.lastbet.menu.BankNetworking.initialize();
+		LOGGER.info("The Last Bet: bank accounts and emerald transactions initialized");
 	}
 
 	public static ResourceLocation id(String path) {

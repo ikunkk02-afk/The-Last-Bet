@@ -4,8 +4,9 @@
   "version": "1.0.0",
   "name": "The Last Bet bank tests",
   "environment": "server",
+  "mixins": ["lastbet.test.mixins.json"],
   "entrypoints": {
-    "fabric-gametest": ["com.shouyun.lastbet.test.BankGameTests", "com.shouyun.lastbet.bank.BankRecoveryGameTests"],
+    "fabric-gametest": ["com.shouyun.lastbet.test.BankGameTests", "com.shouyun.lastbet.bank.BankRecoveryGameTests", "com.shouyun.lastbet.bank.BankTransactionGameTests"],
     "main": ["com.shouyun.lastbet.test.BankSmokeServer"]
   },
   "depends": {"lastbet": "*", "fabric-gametest-api-v1": "*"}

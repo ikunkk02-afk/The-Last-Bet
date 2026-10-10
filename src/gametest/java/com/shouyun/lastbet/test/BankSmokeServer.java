@@ -15,6 +15,7 @@ import net.minecraft.world.level.block.Blocks;
 /** Local-only test fixture, excluded from the distributable JAR. */
 public final class BankSmokeServer implements ModInitializer {
     @Override public void onInitialize() {
+        BankProcessCrash.install();
         if (!Boolean.getBoolean("lastbet.smoke.server")) return;
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayer player = handler.player;
@@ -27,16 +28,22 @@ public final class BankSmokeServer implements ModInitializer {
             }
             player.inventoryMenu.broadcastChanges();
         });
-        ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, player, alive) -> position(player));
+        ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, player, alive) -> {
+            // Isolated fixture cleanup: do not let the respawned test player pick up their death drops.
+            oldPlayer.serverLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                    oldPlayer.getBoundingBox().inflate(4)).forEach(net.minecraft.world.entity.Entity::discard);
+            position(player);
+        });
     }
 
     private static void position(ServerPlayer player) {
         var level = player.server.overworld();
+        int offset = player.getGameProfile().getName().equals("BankSmokeB") ? 10 : 0;
         for (int x = -3; x <= 3; x++) for (int z = -3; z <= 4; z++) {
-            level.setBlockAndUpdate(new BlockPos(x, 79, z), Blocks.STONE.defaultBlockState());
-            for (int y = 80; y <= 83; y++) level.setBlockAndUpdate(new BlockPos(x, y, z), Blocks.AIR.defaultBlockState());
+            level.setBlockAndUpdate(new BlockPos(x + offset, 79, z), Blocks.STONE.defaultBlockState());
+            for (int y = 80; y <= 83; y++) level.setBlockAndUpdate(new BlockPos(x + offset, y, z), Blocks.AIR.defaultBlockState());
         }
-        level.setBlockAndUpdate(new BlockPos(0, 80, 0), BankRegistry.BANK_COUNTER.defaultBlockState());
-        player.teleportTo(level, 0.5, 80, 2.5, 180, 0);
+        level.setBlockAndUpdate(new BlockPos(offset, 80, 0), BankRegistry.BANK_COUNTER.defaultBlockState());
+        player.teleportTo(level, offset + 0.5, 80, 2.5, 180, 0);
     }
 }

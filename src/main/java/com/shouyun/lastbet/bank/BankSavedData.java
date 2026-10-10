@@ -21,6 +21,8 @@ public final class BankSavedData extends SavedData {
     public static final String NAME = "lastbet_bank";
     public static final Factory<BankSavedData> FACTORY = new Factory<>(BankSavedData::new, BankSavedData::load, null);
     private final Map<UUID, BankAccount> accounts = new LinkedHashMap<>();
+    private final Map<UUID, BankTransaction> transactions = new LinkedHashMap<>();
+    private final Map<UUID, java.util.List<BankTransaction>> history = new LinkedHashMap<>();
     private boolean available = true;
 
     public boolean isAvailable() { return available; }
@@ -70,8 +72,53 @@ public final class BankSavedData extends SavedData {
         setDirty();
     }
 
+    public java.util.List<BankTransaction> history(UUID owner) {
+        requireAvailable();
+        return java.util.List.copyOf(history.getOrDefault(owner, java.util.List.of()));
+    }
+
+    public UUID checkpoint(UUID owner) {
+        var entries = history(owner);
+        return entries.isEmpty() ? null : entries.getLast().id();
+    }
+
+    public Optional<BankTransaction> transaction(UUID id) {
+        requireAvailable();
+        return Optional.ofNullable(transactions.get(id));
+    }
+
+    void preflight(BankTransaction transaction, HolderLookup.Provider registries) throws IOException {
+        BankSavedData candidate = load(save(new CompoundTag(), registries), registries);
+        candidate.commit(transaction);
+        CompoundTag root = new CompoundTag();
+        root.put("data", candidate.save(new CompoundTag(), registries));
+        NbtUtils.addCurrentDataVersion(root);
+        BankPersistence.verifyReadable(root);
+    }
+
+    /** Idempotent commit; the balance and ledger are saved in the same bank file. */
+    void commit(BankTransaction transaction) {
+        requireAvailable();
+        BankTransaction existing = transactions.get(transaction.id());
+        if (existing != null) {
+            if (!existing.equals(transaction)) throw new IllegalArgumentException("Conflicting transaction UUID");
+            return;
+        }
+        BankAccount account = accounts.get(transaction.ownerId());
+        var entries = history.computeIfAbsent(transaction.ownerId(), key -> new java.util.ArrayList<>());
+        if (account == null || !account.accountId().equals(transaction.accountId()) || account.deliveryPending()
+                || account.balance() != transaction.balanceBefore() || transaction.sequence() != (long) entries.size() + 1) {
+            throw new IllegalArgumentException("Transaction does not extend its account ledger");
+        }
+        accounts.put(account.ownerId(), new BankAccount(account.ownerId(), account.accountId(),
+                transaction.balanceAfter(), account.cardId(), account.deliveryPending()));
+        transactions.put(transaction.id(), transaction);
+        entries.add(transaction);
+        setDirty();
+    }
+
     public static BankSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
-        if (!tag.contains("schema_version", Tag.TAG_INT) || tag.getInt("schema_version") != 1
+        if (!tag.contains("schema_version", Tag.TAG_INT) || (tag.getInt("schema_version") != 1 && tag.getInt("schema_version") != 2)
                 || !tag.contains("accounts", Tag.TAG_LIST)) {
             throw new IllegalArgumentException("Invalid or unsupported lastbet bank schema");
         }
@@ -96,13 +143,40 @@ public final class BankSavedData extends SavedData {
                 throw new IllegalArgumentException("Duplicate bank owner, account or card at index " + i);
             }
         }
+        if (tag.getInt("schema_version") == 2) {
+            if (!tag.contains("transactions", Tag.TAG_LIST)) throw new IllegalArgumentException("Missing transaction ledger");
+            ListTag ledger = (ListTag) tag.get("transactions");
+            if (!ledger.isEmpty() && ledger.getElementType() != Tag.TAG_COMPOUND) throw new IllegalArgumentException("Invalid transaction list");
+            for (int i = 0; i < ledger.size(); i++) {
+                BankTransaction t = BankTransaction.load(ledger.getCompound(i));
+                BankAccount a = data.accounts.get(t.ownerId());
+                var entries = data.history.computeIfAbsent(t.ownerId(), key -> new java.util.ArrayList<>());
+                if (a == null || !a.accountId().equals(t.accountId()) || a.deliveryPending()
+                        || t.sequence() != (long) entries.size() + 1
+                        || (!entries.isEmpty() && entries.getLast().balanceAfter() != t.balanceBefore())
+                        || data.transactions.putIfAbsent(t.id(), t) != null) throw new IllegalArgumentException("Inconsistent transaction ledger");
+                entries.add(t);
+            }
+            for (BankAccount account : data.accounts.values()) {
+                var entries = data.history.getOrDefault(account.ownerId(), java.util.List.of());
+                CompoundTag entry = list.stream().map(t -> (CompoundTag) t)
+                        .filter(t -> t.getUUID("owner").equals(account.ownerId())).findFirst().orElseThrow();
+                if (entries.isEmpty()) {
+                    if (entry.contains("checkpoint")) throw new IllegalArgumentException("Checkpoint without ledger");
+                } else if (account.balance() != entries.getLast().balanceAfter() || !entry.hasUUID("checkpoint")
+                        || !entry.getUUID("checkpoint").equals(entries.getLast().id())) throw new IllegalArgumentException("Invalid account checkpoint");
+            }
+        } else {
+            // Explicit v1 -> v2 migration. Existing account values are never regenerated.
+            data.setDirty();
+        }
         return data;
     }
 
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         requireAvailable();
-        tag.putInt("schema_version", 1);
+        tag.putInt("schema_version", 2);
         ListTag list = new ListTag();
         for (BankAccount account : accounts.values()) {
             CompoundTag entry = new CompoundTag();
@@ -111,9 +185,14 @@ public final class BankSavedData extends SavedData {
             entry.putUUID("card", account.cardId());
             entry.putLong("balance", account.balance());
             entry.putBoolean("delivery_pending", account.deliveryPending());
+            UUID checkpoint = checkpoint(account.ownerId());
+            if (checkpoint != null) entry.putUUID("checkpoint", checkpoint);
             list.add(entry);
         }
         tag.put("accounts", list);
+        ListTag ledger = new ListTag();
+        transactions.values().forEach(t -> ledger.add(t.save()));
+        tag.put("transactions", ledger);
         return tag;
     }
 
@@ -123,7 +202,7 @@ public final class BankSavedData extends SavedData {
         root.put("data", save(new CompoundTag(), registries));
         NbtUtils.addCurrentDataVersion(root);
         try {
-            BankPersistence.write(file, root);
+            BankPersistence.writeAtomic(file, root);
             setDirty(false);
         } catch (IOException | RuntimeException failure) {
             disable();

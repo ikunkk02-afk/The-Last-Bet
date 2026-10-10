@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: MIT
+package com.shouyun.lastbet.menu;
+
+public enum BankAction {
+    HOME, DEPOSIT_PAGE, WITHDRAWAL_PAGE, HISTORY_PAGE, REGISTER,
+    DEPOSIT_1, DEPOSIT_16, DEPOSIT_64, DEPOSIT_ALL,
+    WITHDRAW_1, WITHDRAW_16, WITHDRAW_64, WITHDRAW_ALL
+}
